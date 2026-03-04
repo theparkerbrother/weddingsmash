@@ -11,13 +11,31 @@
 CREATE OR REPLACE FUNCTION set_audit_fields()
 RETURNS TRIGGER AS $$
 BEGIN
-    NEW.created_at = OLD.created_at;
-    NEW.created_by = OLD.created_by;
+    IF TG_OP = 'INSERT' THEN
+        NEW.created_at := now();
+        NEW.updated_at := now();
 
-    NEW.updated_at = now();
+        IF auth.uid() IS NOT NULL THEN
+            NEW.created_by := auth.uid();
+            NEW.updated_by := auth.uid();
+        ELSE
+            NEW.created_by := 'f1d8fd7b-6f77-4603-9443-f64dcf6d9fe4';
+            NEW.updated_by := 'f1d8fd7b-6f77-4603-9443-f64dcf6d9fe4';
+        END IF;
 
-    IF auth.uid() IS NOT NULL THEN
-        NEW.updated_by = auth.uid();
+    ELSIF TG_OP = 'UPDATE' THEN
+        -- Preserve creation metadata
+        NEW.created_at := OLD.created_at;
+        NEW.created_by := OLD.created_by;
+
+        -- Always update modification metadata
+        NEW.updated_at := now();
+
+        IF auth.uid() IS NOT NULL THEN
+            NEW.updated_by := auth.uid();
+        ELSE
+            NEW.updated_by := 'f1d8fd7b-6f77-4603-9443-f64dcf6d9fe4';
+        END IF;
     END IF;
 
     RETURN NEW;
