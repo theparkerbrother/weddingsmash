@@ -13,7 +13,7 @@ organization_schema = {
 def validate_organization(record, index):
     return validate_record(record, index, organization_schema)
 
-@bp.route("/sync/organizations", methods=["POST"])
+@bp.route("/organizations", methods=["POST"])
 @require_sync_key
 def sync_organizations():
     return run_sync("organizations", validate_organization)

@@ -1,6 +1,6 @@
 from flask import Blueprint
+from .organizations import bp as organizations_bp
 
 sync_bp = Blueprint("sync", __name__)
 
-# Import route modules so they register with this blueprint
-from . import organizations  # noqa
+sync_bp.register_blueprint(organizations_bp)
