@@ -3,24 +3,42 @@ from app.services.supabase import get_supabase_client
 from app.services.sync_log_service import log_sync_event
 
 
-def normalize_payload(payload):
-    if isinstance(payload, dict):
-        return [payload]
-    if isinstance(payload, list):
-        return payload
-    return None
-
-
 def run_sync(entity_name, validate_fn, conflict_field="qb_id"):
     payload = request.get_json(silent=True)
 
     if payload is None:
         return jsonify({"error": "Invalid or missing JSON body"}), 400
 
-    records = normalize_payload(payload)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Body must be an object"}), 400
 
-    if records is None:
-        return jsonify({"error": "Body must be an object or array"}), 400
+    meta = payload.get("meta")
+    records = payload.get("records")
+
+    if not isinstance(meta, dict):
+        return jsonify({"error": "meta must be an object"}), 400
+
+    if not isinstance(records, list):
+        return jsonify({"error": "records must be an array"}), 400
+
+    required_meta_fields = ["source", "entity", "event"]
+    missing_meta_fields = [
+        field for field in required_meta_fields
+        if not meta.get(field)
+    ]
+
+    if missing_meta_fields:
+        return jsonify({
+            "error": "Missing required meta fields",
+            "missing_fields": missing_meta_fields
+        }), 400
+
+    if meta.get("entity") != entity_name:
+        return jsonify({
+            "error": "meta.entity does not match route",
+            "expected": entity_name,
+            "received": meta.get("entity")
+        }), 400
 
     dry_run = request.args.get("dry_run", "false").lower() == "true"
 
@@ -28,7 +46,6 @@ def run_sync(entity_name, validate_fn, conflict_field="qb_id"):
     errors = []
 
     for i, rec in enumerate(records):
-
         try:
             clean, err = validate_fn(rec, i)
 
@@ -85,7 +102,7 @@ def run_sync(entity_name, validate_fn, conflict_field="qb_id"):
         failed_count=len(errors),
         status=status,
         errors=errors,
-        meta={}
+        meta=meta
     )
 
     return jsonify(response), 200
