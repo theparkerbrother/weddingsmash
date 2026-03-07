@@ -8,6 +8,7 @@ bp = Blueprint("sync_organizations", __name__)
 organization_schema = {
     "qb_id": {"required": True},
     "name": {"required": True},
+    "active": {"required": True}
 }
 
 def validate_organization(record, index):
