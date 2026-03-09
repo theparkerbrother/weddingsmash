@@ -1,9 +1,9 @@
 from flask import request, jsonify
 from app.services.supabase import get_supabase_client
-from app.services.sync_log_service import log_sync_event
+from app.services.log_sync_event import log_sync_event
 
 
-def run_sync(entity_name, validate_fn, conflict_field="qb_id"):
+def run_sync(table_name, validate_fn, conflict_field="qb_id"):
     payload = request.get_json(silent=True)
 
     if payload is None:
@@ -21,6 +21,9 @@ def run_sync(entity_name, validate_fn, conflict_field="qb_id"):
     if not isinstance(records, list):
         return jsonify({"error": "records must be an array"}), 400
 
+    if len(records) == 0:
+        return jsonify({"error": "records array is empty"}), 400
+
     required_meta_fields = ["source", "entity", "event"]
     missing_meta_fields = [
         field for field in required_meta_fields
@@ -33,10 +36,10 @@ def run_sync(entity_name, validate_fn, conflict_field="qb_id"):
             "missing_fields": missing_meta_fields
         }), 400
 
-    if meta.get("entity") != entity_name:
+    if meta.get("entity") != table_name:
         return jsonify({
-            "error": "meta.entity does not match route",
-            "expected": entity_name,
+            "error": "meta.entity does not match expected entity",
+            "expected": table_name,
             "received": meta.get("entity")
         }), 400
 
@@ -50,12 +53,14 @@ def run_sync(entity_name, validate_fn, conflict_field="qb_id"):
             clean, err = validate_fn(rec, i)
 
             if err:
+                err["entity"] = table_name
                 errors.append(err)
             else:
                 valid_records.append(clean)
 
         except Exception as e:
             errors.append({
+                "entity": table_name,
                 "index": i,
                 "record": rec,
                 "error": f"validator exception: {str(e)}"
@@ -65,13 +70,14 @@ def run_sync(entity_name, validate_fn, conflict_field="qb_id"):
 
     result = None
 
-    if not dry_run and valid_records:
-        result = (
-            client
-            .table(entity_name)
-            .upsert(valid_records, on_conflict=conflict_field)
-            .execute()
-        )
+    if not dry_run:
+        if valid_records:
+            result = (
+                client
+                .table(table_name)
+                .upsert(valid_records, on_conflict=conflict_field)
+                .execute()
+            )
 
     if len(valid_records) == 0:
         status = "failed"
@@ -81,6 +87,7 @@ def run_sync(entity_name, validate_fn, conflict_field="qb_id"):
         status = "partial"
 
     response = {
+        "entity": table_name,
         "status": status,
         "received": len(records),
         "upserted": len(valid_records),
@@ -95,7 +102,7 @@ def run_sync(entity_name, validate_fn, conflict_field="qb_id"):
         response["data"] = result.data
 
     log_sync_event(
-        entity=entity_name,
+        entity=table_name,
         dry_run=dry_run,
         received_count=len(records),
         valid_count=len(valid_records),
