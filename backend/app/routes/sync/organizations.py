@@ -15,6 +15,7 @@ ENTITY = "organizations"
 schema = {
     "qb_id": {"required": True},   # Quickbase record id
     "name": {"required": True},    # Organization name
+    "owners": {"required": False}, # Owners of the organization
     "active": {"required": True},  # Active flag from source system
 }
 
